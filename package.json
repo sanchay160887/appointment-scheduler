@@ -1,0 +1,26 @@
+{
+  "name": "appointmentscheduler",
+  "version": "1.0.0",
+  "description": "To schedule appointment using ionic application",
+  "main": "server.js",
+  "scripts": {
+    "test": "test server.js",
+    "start": "node server.js"
+  },
+  "keywords": [
+    "Ionic",
+    "Server"
+  ],
+  "author": "Syscraft",
+  "license": "ISC",
+  "dependencies": {
+    "async": "^2.5.0",
+    "body-parser": "^1.17.2",
+    "express": "^4.15.4",
+    "express-session": "^1.15.5",
+    "method-override": "^2.3.9",
+    "mongodb": "^2.2.31",
+    "password-hash": "^1.2.2",
+    "querystring": "^0.2.0"
+  }
+}
