@@ -161,6 +161,8 @@ app.post('/users/register', function(req, res) {
 
     var resObj = {};
 
+    console.log('Api called');
+
     if (!(password && firstName && email && mobileNo)) {
         resObj.IsSuccess = false;
         resObj.message = "Please enter appropriate informations";
@@ -194,6 +196,7 @@ app.post('/users/register', function(req, res) {
                 });
             },
             function(approved, callback) {
+                console.log('approved');
                 collection.insert({
                     'email': email,
                     'firstName': firstName,
@@ -201,9 +204,9 @@ app.post('/users/register', function(req, res) {
                     'password': hashedPassword,
                     'mobileNo': mobileNo,
                     'UserType': 1
-                });
-
-                callback(null, 'registered');
+                }, function() {
+                    callback(null, 'registered');
+                })
             },
             function(response, callback) {
                 db.close();
@@ -214,123 +217,6 @@ app.post('/users/register', function(req, res) {
             }
         ]);
     });
-});
-
-app.post('users/updateprofile', function(req, res) {
-    /*    ResetPassword = req.body.ResetPassword;
-        Password = req.body.Password;
-        Email = req.body.Email;
-        Name = req.body.Name;
-        Designation = req.body.Designation;
-        MobileNo = req.body.MobileNo;
-        AssignedStore = req.body.AssignedStore;
-        UserObjectID = req.body.UserObjectID;
-
-        UserID = UserID.toLowerCase();
-        Email = Email.toLowerCase();
-        Name = Name.toLowerCase();
-        Designation = Designation.toLowerCase();
-        MobileNo = MobileNo.toLowerCase();
-
-        var resObj = {};
-        if (!req.session.loggedInUser) {
-            resObj.IsSuccess = false;
-            resObj.message = loginexpiredmessage;
-            resObj.data = '';
-            res.send(resObj);
-            return;
-        }
-
-        if (!(UserID && Name && Email && UserObjectID)) {
-            resObj.IsSuccess = false;
-            resObj.message = "Please enter appropriate informations";
-            res.send(resObj);
-            return;
-        }
-
-
-        MongoClient.connect(mongourl, function(err, db) {
-            if (err) {
-                return console.dir(err);
-            }
-
-            assert.equal(null, err);
-
-            var collection = db.collection('users');
-
-            async.waterfall([
-                function(callback) {
-                    collection.find({
-                        '_id': { $ne: ObjectId(UserObjectID) }
-                    }).toArray(function(err, users) {
-                        var cnt = users.length;
-                        for (var u in users) {
-                            if (users[u].UserID == UserID) {
-                                resObj.IsSuccess = false;
-                                resObj.message = "This ID Already Exists in the Portal";
-                                res.send(resObj);
-                                return 0;
-                            } else if (users[u].Email == Email) {
-                                resObj.IsSuccess = false;
-                                resObj.message = "Email ID already exists";
-                                res.send(resObj);
-                                return 0;
-                            } else if (users[u].MobileNo == MobileNo) {
-                                resObj.IsSuccess = false;
-                                resObj.message = "Mobile No already exists";
-                                res.send(resObj);
-                                return 0;
-                            }
-                        }
-                        callback(null, users);
-                    });
-                },
-                function(userdata, callback) {
-                    var hashedPassword = passwordHash.generate(Password);
-                    callback(null, hashedPassword);
-                },
-                function(hashedpassword, callback) {
-                    if (ResetPassword) {
-                        collection.update({
-                            '_id': ObjectId(UserObjectID)
-                        }, {
-                            '$set': {
-                                'UserID': UserID,
-                                'Email': Email,
-                                'Name': Name,
-                                'Designation': Designation,
-                                'Password': hashedpassword,
-                                'MobileNo': MobileNo,
-                                'AssignedStore': ObjectId(AssignedStore),
-                            }
-                        });
-
-                    } else {
-                        collection.update({
-                            '_id': ObjectId(UserObjectID)
-                        }, {
-                            '$set': {
-                                'UserID': UserID,
-                                'Email': Email,
-                                'Name': Name,
-                                'Designation': Designation,
-                                'MobileNo': MobileNo,
-                                'AssignedStore': ObjectId(AssignedStore),
-                            }
-                        });
-                    }
-
-                    callback(null, 'updated');
-                },
-                function(response, callback) {
-                    db.close();
-                    resObj.IsSuccess = true;
-                    resObj.message = "Manager has been Updated Successfully";
-                    res.send(resObj);
-                    callback(null, response);
-                }
-            ]);
-        });*/
 });
 
 app.post('users/updatepassword', function(req, res) {
@@ -397,3 +283,285 @@ app.post('users/updatepassword', function(req, res) {
         });
     });
 });
+
+app.post('/users/fetchByMobile', function(req, res) {
+    mobileNo = req.body.mobileNo;
+
+    var resObj = {};
+
+    if (!(mobileNo)) {
+        resObj.IsSuccess = false;
+        resObj.message = "Please provide Mobile Number";
+        res.send(resObj);
+        return;
+    }
+
+
+    MongoClient.connect(mongourl, function(err, db) {
+        if (err) {
+            return console.dir(err);
+        }
+
+        assert.equal(null, err);
+
+        var collection = db.collection('users');
+
+        collection.find({
+            "mobileNo": mobileNo,
+        }).toArray(function(err, users) {
+            if (users.length) {
+                resObj.IsSuccess = true;
+                users[0].password = '';
+                resObj.user = users[0];
+                res.send(resObj);
+                return 0;
+            }
+            callback(null, true);
+        });
+
+    });
+});
+
+app.post('/appointments/request', function(req, res) {
+    var requestedBy = req.body.requestedBy;
+    var requestedFrom = req.body.requestedFrom;
+    var requestDate = req.body.requestDate;
+    var reqStartTime = req.body.startTime;
+    var reqEndTime = req.body.endTime;
+    var privacy = req.body.privacy;
+
+    var resObj = {};
+
+    if (!(requestedBy && requestedFrom && requestDate && reqStartTime && reqEndTime)) {
+        resObj.IsSuccess = false;
+        resObj.message = "Please provide appropriate informations";
+        res.send(resObj);
+        return;
+    }
+
+    if (!privacy) {
+        privacy = 'public';
+    } else if (privacy != 'public' && privacy != 'private') {
+        resObj.IsSuccess = false;
+        resObj.message = "Invalid privacy request";
+        res.send(resObj);
+        return;
+    }
+
+    startTime = new Date(requestDate + ' ' + reqStartTime);
+    if (startTime) {
+        startTime = startTime.getTime();
+    } else {
+        resObj.IsSuccess = false;
+        resObj.message = "Invalid time request";
+        res.send(resObj);
+        return;
+    }
+
+    endTime = new Date(requestDate + ' ' + reqEndTime);
+    if (endTime) {
+        endTime = endTime.getTime();
+    } else {
+        resObj.IsSuccess = false;
+        resObj.message = "Invalid time request";
+        res.send(resObj);
+        return;
+    }
+
+    MongoClient.connect(mongourl, function(err, db) {
+        if (err) {
+            return console.dir(err);
+        }
+
+        assert.equal(null, err);
+
+        var collection = db.collection('users');
+        var appcollection = db.collection('appointments');
+        async.waterfall([
+            function(callback) {
+                collection.find(ObjectId(requestedBy)).
+                toArray(function(err, users) {
+                    if (!users.length) {
+                        resObj.IsSuccess = false;
+                        resObj.message = "Logged In with Invalid User.";
+                        res.send(resObj);
+                        return 0;
+                    }
+                    callback(null, true);
+                });
+            },
+            function(approved, callback) {
+                collection.find(ObjectId(requestedFrom)).
+                toArray(function(err, users) {
+                    if (!users.length) {
+                        resObj.IsSuccess = false;
+                        resObj.message = "Invalid User for request.";
+                        res.send(resObj);
+                        return 0;
+                    }
+                    callback(null, true);
+                });
+            },
+            function(approved, callback) {
+                appcollection.find({
+                    $or: [{
+                            'startTime': { $gte: startTime, $lte: endTime }
+                        },
+                        {
+                            'endTime': { $gte: startTime, $lte: endTime }
+                        }
+                    ],
+                    'status': 'approved',
+                    $or: [{
+                            'requestedFrom': ObjectId(requestedBy)
+                        },
+                        {
+                            'requestedBy': ObjectId(requestedBy)
+                        }
+                    ]
+                }).
+                toArray(function(err, appointments) {
+                    if (appointments.length) {
+                        resObj.IsSuccess = false;
+                        resObj.message = "You are having other appointments on selected time.";
+                        res.send(resObj);
+                        return 0;
+                    }
+                    callback(null, true);
+                });
+            },
+            function(approved, callback) {
+                appcollection.find({
+                    $or: [{
+                            'startTime': { $gte: startTime, $lte: endTime }
+                        },
+                        {
+                            'endTime': { $gte: startTime, $lte: endTime }
+                        }
+                    ],
+                    'status': 'approved',
+                    $or: [{
+                            'requestedFrom': ObjectId(requestedFrom)
+                        },
+                        {
+                            'requestedBy': ObjectId(requestedFrom)
+                        }
+                    ]
+                }).
+                toArray(function(err, appointments) {
+                    if (appointments.length) {
+                        resObj.IsSuccess = false;
+                        resObj.message = "Requested User not available on selected Schedule.";
+                        res.send(resObj);
+                        return 0;
+                    }
+                    callback(null, true);
+                });
+            },
+            function(approved, callback) {
+                appcollection.insert({
+                    'requestedBy': ObjectId(requestedBy),
+                    'requestedFrom': ObjectId(requestedFrom),
+                    'privacy': privacy,
+                    'startTime': startTime,
+                    'endTime': endTime,
+                    'status': 'pending'
+                }, function() {
+                    callback(null, 'registered');
+                })
+            },
+            function(response, callback) {
+                db.close();
+                resObj.IsSuccess = true;
+                resObj.message = "Request sent successfully";
+                res.send(resObj);
+                return 0;
+            }
+        ]);
+    });
+});
+
+app.post('/appointments/all', function(req, res) {
+    var requestedFrom = req.body.requestedFrom;
+    var startFromTime = req.body.startFromTime;
+    var endToTime = req.body.endToTime;
+
+    var resObj = {};
+
+    if (!(requestedFrom && requestedFrom && startFromTime)) {
+        resObj.IsSuccess = false;
+        resObj.message = "Please provide appropriate informations";
+        res.send(resObj);
+        return;
+    }
+
+    MongoClient.connect(mongourl, function(err, db) {
+        if (err) {
+            return console.dir(err);
+        }
+
+        assert.equal(null, err);
+
+        var collection = db.collection('users');
+        var appcollection = db.collection('appointments');
+        async.waterfall([
+            function(callback) {
+                collection.find(ObjectId(requestedFrom)).
+                toArray(function(err, users) {
+                    if (!users.length) {
+                        resObj.IsSuccess = false;
+                        resObj.message = "Invalid User for request.";
+                        res.send(resObj);
+                        return 0;
+                    }
+                    callback(null, true);
+                });
+            },
+            function(next, callback) {
+                appcollection.aggregate([{
+                        $match: {
+                            'startTime': { $gte: startFromTime },
+                            'endTime': { $lte: endToTime }
+                        }
+                    }, {
+                        $lookup: {
+                            from: 'users',
+                            localField: 'requestedBy',
+                            foreignField: '_id',
+                            as: 'requested_by'
+                        }
+                    }, {
+                        $unwind: {
+                            'path': "$requested_by",
+                        }
+                    }, {
+                        $lookup: {
+                            from: 'users',
+                            localField: 'requestedFrom',
+                            foreignField: '_id',
+                            as: 'requested_from'
+                        }
+                    }, {
+                        $unwind: {
+                            'path': "$requested_from",
+                        }
+                    }])
+                    .toArray(function(err, appointments) {
+                        console.log(JSON.stringify(appointments));
+                        if (!appointments) {
+                            resObj.IsSuccess = false;
+                            resObj.message = "No appointments scheduled.";
+                            res.send(resObj);
+                            return 0;
+                        } else {
+                            resObj.IsSuccess = true;
+                            resObj.message = "Appointment fetched successfully.";
+                            resObj.appointments = appointments;
+                            res.send(resObj);
+                        }
+                    });
+            }
+        ]);
+    });
+});
+
