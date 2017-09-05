@@ -75,6 +75,18 @@ function parse_JSON(responsecontent) {
     }
 }
 
+function array_unique(a) {
+    a.sort();
+    for (var i = 1; i < a.length;) {
+        if (a[i - 1] == a[i]) {
+            a.splice(i, 1);
+        } else {
+            i++;
+        }
+    }
+    return a;
+}
+
 
 app.post('/users/signin', function(req, res) {
     mobileNo = req.body.mobileNo;
@@ -565,3 +577,54 @@ app.post('/appointments/all', function(req, res) {
     });
 });
 
+app.post('/users/verifycontacts', function(req, res) {
+    var contacts = req.body.contacts;
+
+    var mobileNos = [];
+
+    resObj = {};
+    
+    console.log(contacts);
+
+    for(var c in contacts){
+        contacts[c].phone = contacts[c].phone.split(' ').join();
+        mobileNos.push(contacts[c].phone);
+    }
+
+    var dbUsers = [];
+
+    mobileNos = array_unique(mobileNos);
+
+    MongoClient.connect(mongourl, function(err, db) {
+        if (err) {
+            return console.dir(err);
+        }
+        assert.equal(null, err);
+
+        var collection = db.collection('users');
+
+        collection.find({
+            "mobileNo": { $in : mobileNos },
+        }).toArray(function(err, users) {
+            for(var u in users){
+                dbUsers[users[u].mobileNo] = { firstName: users[u].firstName, lastName : users[u].lastName, id: users[u]._id }
+            }
+
+            for(var c in contacts){
+                if (dbUsers[contacts[c].phone]){
+                    contacts[c].dbFirstName = dbUsers[contacts[c].phone].firstName;
+                    contacts[c].dbLastName = dbUsers[contacts[c].phone].lastName;
+                    contacts[c].dbId = dbUsers[contacts[c].phone].id;
+                }
+            }
+
+            resObj.IsSuccess = true;
+            resObj.message = "Fetched Successfully.";
+            resObj.contacts = contacts;
+            res.send(resObj);
+            return 0;
+        });
+
+    });
+
+});
