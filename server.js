@@ -141,7 +141,6 @@ app.post('/users/signin', function(req, res) {
 
 app.post('/users/signout', function(req, res) {
     var resObj = {};
-    console.log("Logging out user.");
     req.session.destroy(function() {
         //res.redirect('/');
         resObj.message = "Logged out successfully";
@@ -172,8 +171,6 @@ app.post('/users/register', function(req, res) {
     email = email.toLowerCase();
 
     var resObj = {};
-
-    console.log('Api called');
 
     if (!(password && firstName && email && mobileNo)) {
         resObj.IsSuccess = false;
@@ -208,7 +205,6 @@ app.post('/users/register', function(req, res) {
                 });
             },
             function(approved, callback) {
-                console.log('approved');
                 collection.insert({
                     'email': email,
                     'firstName': firstName,
@@ -370,6 +366,7 @@ app.post('/appointments/request', function(req, res) {
         return;
     }
 
+
     endTime = new Date(requestDate + ' ' + reqEndTime);
     if (endTime) {
         endTime = endTime.getTime();
@@ -416,13 +413,8 @@ app.post('/appointments/request', function(req, res) {
             },
             function(approved, callback) {
                 appcollection.find({
-                    $or: [{
-                            'startTime': { $gte: startTime, $lte: endTime }
-                        },
-                        {
-                            'endTime': { $gte: startTime, $lte: endTime }
-                        }
-                    ],
+                    'startTime': { $lte: endTime },
+                    'endTime': { $gte: startTime },
                     'status': 'approved',
                     $or: [{
                             'requestedFrom': ObjectId(requestedBy)
@@ -444,13 +436,8 @@ app.post('/appointments/request', function(req, res) {
             },
             function(approved, callback) {
                 appcollection.find({
-                    $or: [{
-                            'startTime': { $gte: startTime, $lte: endTime }
-                        },
-                        {
-                            'endTime': { $gte: startTime, $lte: endTime }
-                        }
-                    ],
+                    'startTime': { $lte: endTime },
+                    'endTime': { $gte: startTime },
                     'status': 'approved',
                     $or: [{
                             'requestedFrom': ObjectId(requestedFrom)
@@ -500,7 +487,7 @@ app.post('/appointments/all', function(req, res) {
 
     var resObj = {};
 
-    if (!(requestedFrom && requestedFrom && startFromTime)) {
+    if (!(requestedFrom && endToTime && startFromTime)) {
         resObj.IsSuccess = false;
         resObj.message = "Please provide appropriate informations";
         res.send(resObj);
@@ -533,7 +520,14 @@ app.post('/appointments/all', function(req, res) {
                 appcollection.aggregate([{
                         $match: {
                             'startTime': { $gte: startFromTime },
-                            'endTime': { $lte: endToTime }
+                            'endTime': { $lte: endToTime },
+                            $or: [{
+                                    'requestedFrom': ObjectId(requestedFrom)
+                                },
+                                {
+                                    'requestedBy': ObjectId(requestedFrom)
+                                }
+                            ]
                         }
                     }, {
                         $lookup: {
@@ -559,7 +553,6 @@ app.post('/appointments/all', function(req, res) {
                         }
                     }])
                     .toArray(function(err, appointments) {
-                        console.log(JSON.stringify(appointments));
                         if (!appointments) {
                             resObj.IsSuccess = false;
                             resObj.message = "No appointments scheduled.";
@@ -583,10 +576,8 @@ app.post('/users/verifycontacts', function(req, res) {
     var mobileNos = [];
 
     resObj = {};
-    
-    console.log(contacts);
 
-    for(var c in contacts){
+    for (var c in contacts) {
         contacts[c].phone = contacts[c].phone.split(' ').join();
         mobileNos.push(contacts[c].phone);
     }
@@ -604,14 +595,14 @@ app.post('/users/verifycontacts', function(req, res) {
         var collection = db.collection('users');
 
         collection.find({
-            "mobileNo": { $in : mobileNos },
+            "mobileNo": { $in: mobileNos },
         }).toArray(function(err, users) {
-            for(var u in users){
-                dbUsers[users[u].mobileNo] = { firstName: users[u].firstName, lastName : users[u].lastName, id: users[u]._id }
+            for (var u in users) {
+                dbUsers[users[u].mobileNo] = { firstName: users[u].firstName, lastName: users[u].lastName, id: users[u]._id }
             }
 
-            for(var c in contacts){
-                if (dbUsers[contacts[c].phone]){
+            for (var c in contacts) {
+                if (dbUsers[contacts[c].phone]) {
                     contacts[c].dbFirstName = dbUsers[contacts[c].phone].firstName;
                     contacts[c].dbLastName = dbUsers[contacts[c].phone].lastName;
                     contacts[c].dbId = dbUsers[contacts[c].phone].id;
@@ -626,5 +617,145 @@ app.post('/users/verifycontacts', function(req, res) {
         });
 
     });
+});
 
+app.post('/appointments/pendings', function(req, res) {
+    var requestedFrom = req.body.requestedFrom;
+    var startFromTime = req.body.startFromTime;
+
+    var resObj = {};
+
+    if (!startFromTime) {
+        resObj.IsSuccess = false;
+        resObj.message = "Please provide appropriate informations";
+        res.send(resObj);
+        return;
+    }
+
+    MongoClient.connect(mongourl, function(err, db) {
+        if (err) {
+            return console.dir(err);
+        }
+
+        assert.equal(null, err);
+
+        var collection = db.collection('users');
+        var appcollection = db.collection('appointments');
+        async.waterfall([
+            function(callback) {
+                collection.find(ObjectId(requestedFrom)).
+                toArray(function(err, users) {
+                    if (!users.length) {
+                        resObj.IsSuccess = false;
+                        resObj.message = "Invalid User for request.";
+                        res.send(resObj);
+                        return 0;
+                    }
+                    callback(null, true);
+                });
+            },
+            function(next, callback) {
+                appcollection.aggregate([{
+                        $match: {
+                            'startTime': { $gte: startFromTime },
+                            'requestedFrom': ObjectId(requestedFrom),
+                            'status': 'pending'
+                        }
+                    }, {
+                        $lookup: {
+                            from: 'users',
+                            localField: 'requestedBy',
+                            foreignField: '_id',
+                            as: 'requested_by'
+                        }
+                    }, {
+                        $unwind: {
+                            'path': "$requested_by",
+                        }
+                    }])
+                    .toArray(function(err, appointments) {
+                        if (!appointments) {
+                            resObj.IsSuccess = false;
+                            resObj.message = "No appointments scheduled.";
+                            res.send(resObj);
+                            return 0;
+                        } else {
+                            resObj.IsSuccess = true;
+                            resObj.message = "Appointment fetched successfully.";
+                            resObj.appointments = appointments;
+                            res.send(resObj);
+                        }
+                    });
+            }
+        ]);
+    });
+});
+
+app.post('/appointments/approve', function(req, res) {
+    var appointmetnId = req.body.appointmetnId;
+    var actionTaken = req.body.actionTaken;
+    var requestUser = req.body.requestUser;
+
+    var resObj = {};
+
+    if (!(requestUser && appointmetnId && actionTaken)) {
+        resObj.IsSuccess = false;
+        resObj.message = "Please provide appropriate informations";
+        res.send(resObj);
+        return;
+    }
+
+    MongoClient.connect(mongourl, function(err, db) {
+        if (err) {
+            return console.dir(err);
+        }
+        assert.equal(null, err);
+
+        var collection = db.collection('appointments');
+
+        async.waterfall([
+            function(callback) {
+                appcollection.find({
+                    'startTime': { $lte: endTime },
+                    'endTime': { $gte: startTime },
+                    'status': 'approved',
+                    $or: [{
+                            'requestedFrom': ObjectId(requestUser)
+                        },
+                        {
+                            'requestedBy': ObjectId(requestUser)
+                        }
+                    ]
+                }).
+                toArray(function(err, appointments) {
+                    if (appointments.length) {
+                        resObj.IsSuccess = false;
+                        resObj.message = "Unable to approve. You are having another appointments on this time.";
+                        res.send(resObj);
+                        return 0;
+                    }
+                    callback(null, true);
+                });
+            },
+            function(next, callback) {
+                collection.find(ObjectId(appointmetnId)).toArray(function(err, users) {
+
+                    collection.update({
+                        _id: ObjectId(appointmetnId)
+                    }, {
+                        '$set': {
+                            'status': actionTaken,
+                        }
+                    }).then(function() {
+                        resObj.IsSuccess = true;
+                        resObj.message = "Status updated successfully.";
+                        res.send(resObj);
+                        return 0;
+                    })
+
+                });
+
+            }
+        ]);
+    });
 });
