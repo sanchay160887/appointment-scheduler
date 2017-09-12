@@ -606,7 +606,12 @@ app.post('/users/verifycontacts', function(req, res) {
                     contacts[c].dbFirstName = dbUsers[contacts[c].phone].firstName;
                     contacts[c].dbLastName = dbUsers[contacts[c].phone].lastName;
                     contacts[c].dbId = dbUsers[contacts[c].phone].id;
+                } else {
+                    contacts[c].dbFirstName = contacts[c].name;
+                    contacts[c].dbLastName = '';
+                    contacts[c].dbId = '';
                 }
+                contacts[c].allFieldsValue = contacts[c].dbFirstName.toLowerCase() + ' ' + contacts[c].dbLastName.toLowerCase() + ' ' + contacts[c].phone;
             }
 
             resObj.IsSuccess = true;
@@ -622,6 +627,7 @@ app.post('/users/verifycontacts', function(req, res) {
 app.post('/appointments/pendings', function(req, res) {
     var requestedFrom = req.body.requestedFrom;
     var startFromTime = req.body.startFromTime;
+    var listFilter = req.body.listFilter;
 
     var resObj = {};
 
@@ -630,6 +636,10 @@ app.post('/appointments/pendings', function(req, res) {
         resObj.message = "Please provide appropriate informations";
         res.send(resObj);
         return;
+    }
+
+    if (!listFilter) {
+        listFilter = 'pending';
     }
 
     MongoClient.connect(mongourl, function(err, db) {
@@ -655,12 +665,16 @@ app.post('/appointments/pendings', function(req, res) {
                 });
             },
             function(next, callback) {
+                var filters = {
+                    'startTime': { $gte: startFromTime },
+                    'requestedFrom': ObjectId(requestedFrom),
+
+                };
+                if (listFilter != 'all') {
+                    filters.status = listFilter;
+                }
                 appcollection.aggregate([{
-                        $match: {
-                            'startTime': { $gte: startFromTime },
-                            'requestedFrom': ObjectId(requestedFrom),
-                            'status': 'pending'
-                        }
+                        $match: filters
                     }, {
                         $lookup: {
                             from: 'users',
@@ -673,6 +687,7 @@ app.post('/appointments/pendings', function(req, res) {
                             'path': "$requested_by",
                         }
                     }])
+                    .sort({ 'startTime': 1 })
                     .toArray(function(err, appointments) {
                         if (!appointments) {
                             resObj.IsSuccess = false;
@@ -755,6 +770,88 @@ app.post('/appointments/approve', function(req, res) {
 
                 });
 
+            }
+        ]);
+    });
+});
+
+app.post('/appointments/sent', function(req, res) {
+    var requestedBy = req.body.requestedBy;
+    var startFromTime = req.body.startFromTime;
+    var listFilter = req.body.listFilter;
+
+    var resObj = {};
+
+    if (!startFromTime) {
+        resObj.IsSuccess = false;
+        resObj.message = "Please provide appropriate informations";
+        res.send(resObj);
+        return;
+    }
+
+    if (!listFilter) {
+        listFilter = 'all';
+    }
+
+    MongoClient.connect(mongourl, function(err, db) {
+        if (err) {
+            return console.dir(err);
+        }
+
+        assert.equal(null, err);
+
+        var collection = db.collection('users');
+        var appcollection = db.collection('appointments');
+        async.waterfall([
+            function(callback) {
+                collection.find(ObjectId(requestedBy)).
+                toArray(function(err, users) {
+                    if (!users.length) {
+                        resObj.IsSuccess = false;
+                        resObj.message = "Invalid User for request.";
+                        res.send(resObj);
+                        return 0;
+                    }
+                    callback(null, true);
+                });
+            },
+            function(next, callback) {
+                var filters = {
+                    'startTime': { $gte: startFromTime },
+                    'requestedBy': ObjectId(requestedBy),
+
+                };
+                if (listFilter != 'all') {
+                    filters.status = listFilter;
+                }
+                appcollection.aggregate([{
+                        $match: filters
+                    }, {
+                        $lookup: {
+                            from: 'users',
+                            localField: 'requestedFrom',
+                            foreignField: '_id',
+                            as: 'requested_from'
+                        }
+                    }, {
+                        $unwind: {
+                            'path': "$requested_from",
+                        }
+                    }])
+                    .sort({ 'startTime': 1 })
+                    .toArray(function(err, appointments) {
+                        if (!appointments) {
+                            resObj.IsSuccess = false;
+                            resObj.message = "No appointments requested.";
+                            res.send(resObj);
+                            return 0;
+                        } else {
+                            resObj.IsSuccess = true;
+                            resObj.message = "Appointment fetched successfully.";
+                            resObj.appointments = appointments;
+                            res.send(resObj);
+                        }
+                    });
             }
         ]);
     });
