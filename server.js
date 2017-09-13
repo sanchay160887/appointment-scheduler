@@ -63,7 +63,7 @@ app.all("/*", function(req, res, next) {
     return next();
 });
 
-var server = app.listen(process.env.PORT || 3000, function() {
+var server = app.listen(process.env.PORT || 5000, function() {
     console.log("App started with Mongodb");
 });
 
